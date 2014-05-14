@@ -1,16 +1,15 @@
 package org.shenjia.socketproxy;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundByteHandlerAdapter;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.socket.nio.NioSocketChannel;
 
-public class SocketProxyFrontendHandler extends ChannelInboundByteHandlerAdapter {
+public class SocketProxyFrontendHandler extends ChannelInboundHandlerAdapter {
 
     private final String remoteHost;
     private final int remotePort;
@@ -29,7 +28,7 @@ public class SocketProxyFrontendHandler extends ChannelInboundByteHandlerAdapter
         // Start the connection attempt.
         Bootstrap b = new Bootstrap();
         b.group(inboundChannel.eventLoop())
-         .channel(NioSocketChannel.class)
+         .channel(ctx.channel().getClass())
          .handler(new SocketProxyBackendHandler(inboundChannel))
          .option(ChannelOption.AUTO_READ, false);
         ChannelFuture f = b.connect(remoteHost, remotePort);
@@ -49,11 +48,9 @@ public class SocketProxyFrontendHandler extends ChannelInboundByteHandlerAdapter
     }
 
     @Override
-    public void inboundBufferUpdated(final ChannelHandlerContext ctx, ByteBuf in) throws Exception {
-        ByteBuf out = outboundChannel.outboundByteBuffer();
-        out.writeBytes(in);
+    public void channelRead(final ChannelHandlerContext ctx, Object msg) throws Exception {
         if (outboundChannel.isActive()) {
-            outboundChannel.flush().addListener(new ChannelFutureListener() {
+            outboundChannel.writeAndFlush(msg).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
                     if (future.isSuccess()) {
@@ -81,11 +78,11 @@ public class SocketProxyFrontendHandler extends ChannelInboundByteHandlerAdapter
     }
 
     /**
-     * Closes the specified channel after all queued write requests are flushed.
-     */
+	 * Closes the specified channel after all queued write requests are flushed.
+	 */
     static void closeOnFlush(Channel ch) {
         if (ch.isActive()) {
-            ch.flush().addListener(ChannelFutureListener.CLOSE);
+            ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
         }
     }
 }
